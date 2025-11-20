@@ -182,8 +182,8 @@ class EzCustomScrollView extends StatelessWidget {
   void _reportError(BuildContext context, bool badWidth, bool badHeight) {
     String culprit = "an unknown parent";
     context.visitAncestorElements((element) {
-      if (element.widget is Flex ||
-          element.widget is ScrollView) { // Generalized to ScrollView
+      if (element.widget is Flex || element.widget is ScrollView) {
+        // Generalized to ScrollView
         culprit = element.widget.runtimeType.toString();
         return false;
       }
@@ -201,11 +201,13 @@ class EzCustomScrollView extends StatelessWidget {
 
     FlutterError.reportError(
       FlutterErrorDetails(
-        exception: 'EzCustomScrollView: Unbounded $problematicDimension detected.',
+        exception:
+            'EzCustomScrollView: Unbounded $problematicDimension detected.',
         library: 'EzCustomScrollView',
         context: ErrorDescription('while building EzCustomScrollView'),
         informationCollector: () => [
-          ErrorSummary('EzCustomScrollView has applied an automatic layout fix.'),
+          ErrorSummary(
+              'EzCustomScrollView has applied an automatic layout fix.'),
           ErrorDescription(
             'This widget was placed directly inside a $culprit, which provides infinite $problematicDimension. '
             'This would normally cause a layout crash.',

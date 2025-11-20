@@ -44,7 +44,8 @@ class CustomScrollDemoScreen extends StatelessWidget {
             ),
             // Normally crashes in Column, but safe here
             EzCustomScrollView(
-              physics: const NeverScrollableScrollPhysics(), // Let parent scroll
+              physics:
+                  const NeverScrollableScrollPhysics(), // Let parent scroll
               slivers: [
                 SliverToBoxAdapter(
                   child: Container(
