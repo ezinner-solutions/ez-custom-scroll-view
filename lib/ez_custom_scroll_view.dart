@@ -4,13 +4,10 @@ import 'package:flutter/material.dart';
 
 /// A defensive, self-aware version of [CustomScrollView].
 ///
-/// If it detects that its parent is providing unbounded constraints (e.g., inside
-/// a Column or a Row), it automatically imposes bounded dimensions to prevent
-/// a layout crash.
-///
-/// In debug mode, it also:
-/// 1. Renders a red border around itself to visually identify that a fix was applied.
-/// 2. Reports a detailed error to the console with the specific fix required.
+/// Features:
+/// *   **Crash Prevention:** Automatically detects unbounded constraints (e.g., inside [Column] or [Row]) and applies a safe fallback size.
+/// *   **Debug Feedback:** In debug mode, displays a red border and logs a detailed error explaining the issue and the fix.
+/// *   **Drop-in Replacement:** Supports the same API as [CustomScrollView].
 class EzCustomScrollView extends StatelessWidget {
   /// See [CustomScrollView.scrollDirection].
   final Axis scrollDirection;

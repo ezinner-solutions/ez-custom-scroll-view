@@ -1,7 +1,20 @@
 name: ez_custom_scroll_view
-description: A defensive, self-aware CustomScrollView that prevents layout crashes from unbounded height constraints.
-version: 0.0.1
+description: A crash-safe CustomScrollView that automatically handles unbounded constraints in any direction.
+version: 0.0.2
 homepage: https://github.com/Evgenii-Zinner/ez_custom_scroll_view
+repository: https://github.com/Evgenii-Zinner/ez_custom_scroll_view
+issue_tracker: https://github.com/Evgenii-Zinner/ez_custom_scroll_view/issues
+documentation: https://flutter.ezinner.com/ez_custom_scroll_view
+topics:
+  - flutter
+  - ez-flutter
+  - scrollview
+  - layout
+  - slivers
+funding:
+  - https://github.com/sponsors/Evgenii-Zinner/
+  - https://thanks.dev/u/gh/evgenii-zinner
+  - https://buymeacoffee.com/evgeniizinner
 
 environment:
   sdk: '>=3.0.0 <4.0.0'

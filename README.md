@@ -1,73 +1,82 @@
-# EzCustomScrollView
+# EZ Custom Scroll View
 
-A defensive, self-aware version of `CustomScrollView` that won't crash when placed in an unbounded-height or unbounded-width parent.
+A **crash-safe, self-aware** replacement for `CustomScrollView` that prevents layout errors in `Column`, `Row`, `Flex`, and nested scroll views.
 
-## Problem
+## 🛑 The Problem
 
-Flutter's `CustomScrollView` (and `ListView`, `GridView`) requires a bounded height (or width, depending on scroll direction) to function correctly. If you place it inside a widget that provides infinite constraints, such as a `Column`, `Row`, or an unbounded `Flex`, it will cause a layout crash.
+Flutter's `CustomScrollView` tries to expand to fill all available space in its scroll direction. When placed inside a parent with **unbounded constraints**, it breaks the layout.
 
-This is a common issue, especially for developers new to Flutter. The standard fix is to wrap the scroll view in an `Expanded` or `SizedBox` widget.
+Common scenarios that cause this crash:
+*   Placing a vertical scroll view inside a **`Column`**.
+*   Placing a horizontal scroll view inside a **`Row`**.
+*   Nesting it inside another **`ListView`**, **`CustomScrollView`**, or **`SingleChildScrollView`** (NestedListView scenario).
+*   Using it inside a **`Flex`** or unconstrained **`Card`**.
 
-## Solution
+Instead of a simple error, this often breaks the build process, causing the UI to vanish and spamming the console with:
+> "Vertical viewport was given unbounded height."
+> "RenderBox was not laid out: RenderViewport... NEEDS-PAINT NEEDS-COMPOSITING-BITS-UPDATE"
+> "Failed assertion: ... 'hasSize'"
 
-`EzCustomScrollView` is a drop-in replacement for `CustomScrollView` that automatically detects when it is placed in an unbounded environment (height or width).
+## ✅ The EZ Solution
 
--   **In Debug Mode:** It displays a red border around the widget and prints a detailed error message to the console, explaining exactly what is wrong and how to fix it (e.g., "Wrap EzCustomScrollView in an Expanded widget").
--   **In Release Mode:** It silently applies a safe fallback (rendering a `SizedBox` with a default or calculated size) to prevent the app from crashing.
+`EzCustomScrollView` is a defensive wrapper that detects these unbounded constraints before they cause damage:
 
-## Features
+*   **Auto-Detection:** Instantly identifies if it's in a `Column`, `Row`, or other unbounded parent.
+*   **Crash Prevention:** Automatically applies a safe, bounded size to ensure the widget renders visible content instead of breaking.
+*   **Developer Feedback:**
+    *   **Debug Mode:** Displays a **red border** and logs a clear warning identifying the exact parent causing the issue (e.g., "Unbounded height detected in Column").
+    *   **Release Mode:** Silently fixes the layout so your users never see a broken screen.
 
--   **Crash Prevention:** Automatically handles unbounded height and width constraints.
--   **Debug-Friendly:** Provides visual feedback (red border) and detailed error messages in the console.
--   **Drop-in Replacement:** Supports the same properties as `CustomScrollView` (`slivers`, `controller`, `physics`, etc.).
--   **Zero Dependencies:** Lightweight and easy to include in any project.
+## ✨ Features
 
-## Usage
+*   **Drop-in Replacement:** Same API as `CustomScrollView`.
+*   **Omni-Directional Safety:** Handles both unbounded height (Vertical) and width (Horizontal).
+*   **SEO & Discoverability:** Solves issues with `Column`, `Row`, `NestedListView`, `Flex`, and `Card`.
+*   **Zero Dependencies:** Lightweight and pure Flutter.
 
-Replace `CustomScrollView` with `EzCustomScrollView`:
+## 📦 Installation
 
-```dart
-// Before (might crash in a Column)
-CustomScrollView(
-  slivers: [
-    SliverAppBar(title: Text('Title')),
-    SliverList(delegate: SliverChildBuilderDelegate(...)),
-  ],
-);
-
-// After (safe)
-EzCustomScrollView(
-  slivers: [
-    SliverAppBar(title: Text('Title')),
-    SliverList(delegate: SliverChildBuilderDelegate(...)),
-  ],
-);
+```shell
+flutter pub add ez_custom_scroll_view
 ```
 
-### Example: The "Correct" Fix
+## 🚀 Usage
 
-While `EzCustomScrollView` prevents crashes, the best practice is still to provide bounded constraints. The widget helps you identify where this is needed.
+Simply replace `CustomScrollView` with `EzCustomScrollView`.
 
+### Vertical Example (Safe in Column)
 ```dart
 Column(
   children: [
     Text('Header'),
-    // Use Expanded to give the scroll view the remaining space
-    Expanded(
-      child: EzCustomScrollView(
-        slivers: [
-          // ... your slivers
-        ],
-      ),
+    EzCustomScrollView(
+      slivers: [
+        SliverList(delegate: SliverChildListDelegate([])),
+      ],
     ),
   ],
 )
 ```
 
-## Contributing
+### Horizontal Example (Safe in Row)
+```dart
+Row(
+  children: [
+    Text('Label'),
+    EzCustomScrollView(
+      scrollDirection: Axis.horizontal,
+      slivers: [
+        SliverList(delegate: SliverChildListDelegate([])),
+      ],
+    ),
+  ],
+)
+```
 
-Contributions are welcome! Please feel free to open an issue or submit a pull request.
+## 🤝 Contributing
 
-## License
+Contributions are welcome! Please feel free to open an issue or submit a pull request on [GitHub](https://github.com/Evgenii-Zinner/ez_custom_scroll_view).
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## 📜 License
+
+MIT License - see the [LICENSE](LICENSE) file for details.
