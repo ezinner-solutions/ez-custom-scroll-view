@@ -1,13 +1,84 @@
+library ez_custom_scroll_view;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
-/// A defensive, self-aware version of [CustomScrollView].
+/// A defensive, self-aware drop-in replacement for [CustomScrollView] that prevents
+/// layout crashes when placed inside parents with unbounded constraints.
 ///
-/// Features:
-/// *   **Crash Prevention:** Automatically detects unbounded constraints (e.g., inside [Column] or [Row]) and applies a safe fallback size.
-/// *   **Debug Feedback:** In debug mode, displays a red border and logs a detailed error explaining the issue and the fix.
-/// *   **Drop-in Replacement:** Supports the same API as [CustomScrollView].
+/// In standard Flutter, placing a [CustomScrollView] inside a [Column], [Row],
+/// [Flex], or nested scroll view results in a fatal layout exception:
+/// * `"Vertical viewport was given unbounded height"`
+/// * `"Horizontal viewport was given unbounded width"`
+///
+/// [EzCustomScrollView] intercepts these unbounded constraints before they cause
+/// a crash:
+///
+/// * **Crash Prevention:** Automatically detects unbounded dimensions in the scrolling
+///   or cross axes and applies a sensible, bounded fallback size.
+/// * **Developer Feedback:** In debug mode, displays a visible red indicator and logs
+///   a detailed, actionable [FlutterError] explaining the exact parent culprit
+///   (e.g., [Column], [Row]) and how to permanently fix it.
+/// * **Silent Protection:** In release mode, silently resolves the layout so users
+///   never experience a red screen of death.
+/// * **Drop-in Parity:** Accepts all parameters supported by standard [CustomScrollView].
+///
+/// ## Layout algorithm
+///
+/// 1. Uses a [LayoutBuilder] to inspect incoming box constraints.
+/// 2. If constraints are bounded in both the scrolling and cross axes (or if [shrinkWrap] is true),
+///    renders standard [CustomScrollView] directly.
+/// 3. If unbounded constraints are detected:
+///    - Calculates a safe fallback size based on available screen space via [MediaQuery] or [View].
+///    - Reports a structured error with culprit diagnosis via [_EzCustomScrollViewHelper.reportUnboundedError] in debug mode.
+///    - Invokes [onUnboundedDetected] callback if provided.
+///    - Wraps the [CustomScrollView] in a [SizedBox] with bounded dimensions.
+///    - When [showDebugIndicator] is true and running in debug mode, applies a red outline border.
+///
+/// ## Examples
+///
+/// ### Safe inside a Column (Crash Prevention)
+///
+/// ```dart
+/// Column(
+///   children: [
+///     const Text('Header'),
+///     // Won't crash! Automatically constrained with a debug warning.
+///     EzCustomScrollView(
+///       slivers: [
+///         SliverList.builder(
+///           itemCount: 20,
+///           itemBuilder: (context, index) => ListTile(title: Text('Item $index')),
+///         ),
+///       ],
+///     ),
+///   ],
+/// )
+/// ```
+///
+/// ### Horizontal scroll inside a Row
+///
+/// ```dart
+/// Row(
+///   children: [
+///     const Text('Sidebar'),
+///     EzCustomScrollView(
+///       scrollDirection: Axis.horizontal,
+///       slivers: [
+///         SliverToBoxAdapter(
+///           child: Container(width: 300, color: Colors.blue),
+///         ),
+///       ],
+///     ),
+///   ],
+/// )
+/// ```
+///
+/// See also:
+///
+///  * [CustomScrollView], the standard Flutter scroll view.
+///  * [SliverList] and [SliverGrid], common sliver building blocks.
 class EzCustomScrollView extends StatelessWidget {
   /// See [CustomScrollView.scrollDirection].
   final Axis scrollDirection;
@@ -37,9 +108,13 @@ class EzCustomScrollView extends StatelessWidget {
   final double anchor;
 
   /// See [CustomScrollView.cacheExtent].
+  @Deprecated('Use scrollCacheExtent in Flutter 3.41+.')
   final double? cacheExtent;
 
-  /// See [CustomScrollView.slivers].
+  /// See [CustomScrollView.scrollCacheExtent].
+  final double? scrollCacheExtent;
+
+  /// The slivers to place inside the viewport.
   final List<Widget> slivers;
 
   /// See [CustomScrollView.semanticChildCount].
@@ -57,11 +132,34 @@ class EzCustomScrollView extends StatelessWidget {
   /// See [CustomScrollView.clipBehavior].
   final Clip clipBehavior;
 
-  /// Creates a defensive, self-aware version of [CustomScrollView].
+  /// How to behave during hit testing.
+  final HitTestBehavior hitTestBehavior;
+
+  /// Whether to display a red border indicator in debug mode when unbounded constraints are detected.
   ///
-  /// This widget automatically detects unbounded constraints and applies a fix
-  /// to prevent layout crashes, providing detailed debugging information in
-  /// debug mode.
+  /// Defaults to `true`. Has no effect in release mode.
+  final bool showDebugIndicator;
+
+  /// Optional custom fallback height to use when unbounded height is detected.
+  ///
+  /// If `null`, defaults to 50% of available screen height.
+  final double? fallbackHeight;
+
+  /// Optional custom fallback width to use when unbounded width is detected.
+  ///
+  /// If `null`, defaults to 50% of available screen width.
+  final double? fallbackWidth;
+
+  /// Optional callback invoked when unbounded constraints are detected.
+  ///
+  /// Useful for automated telemetry, testing, or custom diagnostic logging.
+  final void Function({
+    required bool isWidthUnbounded,
+    required bool isHeightUnbounded,
+    required String? culprit,
+  })? onUnboundedDetected;
+
+  /// Creates a defensive, self-aware version of [CustomScrollView].
   const EzCustomScrollView({
     super.key,
     this.scrollDirection = Axis.vertical,
@@ -73,13 +171,19 @@ class EzCustomScrollView extends StatelessWidget {
     this.shrinkWrap = false,
     this.center,
     this.anchor = 0.0,
-    this.cacheExtent,
+    @Deprecated('Use scrollCacheExtent in Flutter 3.41+.') this.cacheExtent,
+    this.scrollCacheExtent,
     this.slivers = const <Widget>[],
     this.semanticChildCount,
     this.dragStartBehavior = DragStartBehavior.start,
     this.keyboardDismissBehavior = ScrollViewKeyboardDismissBehavior.manual,
     this.restorationId,
     this.clipBehavior = Clip.hardEdge,
+    this.hitTestBehavior = HitTestBehavior.opaque,
+    this.showDebugIndicator = true,
+    this.fallbackHeight,
+    this.fallbackWidth,
+    this.onUnboundedDetected,
   });
 
   @override
@@ -89,131 +193,194 @@ class EzCustomScrollView extends StatelessWidget {
         final bool isUnboundedHeight = constraints.maxHeight.isInfinite;
         final bool isUnboundedWidth = constraints.maxWidth.isInfinite;
 
-        // If constraints are fine, just build the CustomScrollView.
-        if (!isUnboundedHeight && !isUnboundedWidth) {
-          return CustomScrollView(
-            scrollDirection: scrollDirection,
-            reverse: reverse,
-            controller: controller,
-            primary: primary,
-            physics: physics,
-            scrollBehavior: scrollBehavior,
-            shrinkWrap: shrinkWrap,
-            center: center,
-            anchor: anchor,
-            cacheExtent: cacheExtent,
-            slivers: slivers,
-            semanticChildCount: semanticChildCount,
-            dragStartBehavior: dragStartBehavior,
-            keyboardDismissBehavior: keyboardDismissBehavior,
-            restorationId: restorationId,
-            clipBehavior: clipBehavior,
-          );
+        // Determine whether scrolling or cross axis would crash standard viewport
+        final bool isScrollAxisUnbounded =
+            (scrollDirection == Axis.vertical && isUnboundedHeight) ||
+                (scrollDirection == Axis.horizontal && isUnboundedWidth);
+
+        final bool isCrossAxisUnbounded =
+            (scrollDirection == Axis.vertical && isUnboundedWidth) ||
+                (scrollDirection == Axis.horizontal && isUnboundedHeight);
+
+        final bool needsFix =
+            (isScrollAxisUnbounded && !shrinkWrap) || isCrossAxisUnbounded;
+
+        final Widget scrollView = _buildScrollView();
+
+        if (!needsFix) {
+          return scrollView;
         }
 
-        // --- Apply safe fallback for unbounded constraints ---
-        Widget fixedScrollView = CustomScrollView(
-          scrollDirection: scrollDirection,
-          reverse: reverse,
-          controller: controller,
-          primary: primary,
-          physics: physics,
-          scrollBehavior: scrollBehavior,
-          shrinkWrap: shrinkWrap,
-          center: center,
-          anchor: anchor,
-          cacheExtent: cacheExtent,
-          slivers: slivers,
-          semanticChildCount: semanticChildCount,
-          dragStartBehavior: dragStartBehavior,
-          keyboardDismissBehavior: keyboardDismissBehavior,
-          restorationId: restorationId,
-          clipBehavior: clipBehavior,
+        // Calculate safe fallback dimensions
+        final fallbackDimensions =
+            _EzCustomScrollViewHelper.calculateFallbackDimensions(
+          context: context,
+          constraints: constraints,
+          isUnboundedWidth: isUnboundedWidth,
+          isUnboundedHeight: isUnboundedHeight,
+          customFallbackWidth: fallbackWidth,
+          customFallbackHeight: fallbackHeight,
         );
 
-        final mediaQuery = MediaQuery.of(context);
-
-        final double fixedHeight;
-        if (isUnboundedHeight) {
-          // Calculate a reasonable default height based on the screen size.
-          final calculatedSafeHeight =
-              mediaQuery.size.height - mediaQuery.padding.top - kToolbarHeight;
-          fixedHeight = calculatedSafeHeight * 0.5; // Use 50% as a default
-        } else {
-          fixedHeight = constraints.maxHeight;
-        }
-
-        final double fixedWidth;
-        if (isUnboundedWidth) {
-          fixedWidth = mediaQuery.size.width * 0.5; // Use 50% as a default
-        } else {
-          fixedWidth = constraints.maxWidth;
-        }
-
         if (kDebugMode) {
-          // Identify the parent widget causing the issue and report a detailed error.
-          _reportError(context, isUnboundedWidth, isUnboundedHeight);
+          final culprit = _EzCustomScrollViewHelper.findCulprit(context);
 
-          // Wrap with a visual indicator to highlight the problematic widget.
-          return Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.red, width: 2.5),
-              borderRadius: BorderRadius.circular(4.0),
-            ),
-            child: SizedBox(
-              width: fixedWidth,
-              height: fixedHeight,
-              child: fixedScrollView,
-            ),
+          _EzCustomScrollViewHelper.reportUnboundedError(
+            badWidth: isUnboundedWidth,
+            badHeight: isUnboundedHeight,
+            scrollDirection: scrollDirection,
+            culprit: culprit,
           );
+
+          if (onUnboundedDetected != null) {
+            onUnboundedDetected!(
+              isWidthUnbounded: isUnboundedWidth,
+              isHeightUnbounded: isUnboundedHeight,
+              culprit: culprit,
+            );
+          }
+
+          if (showDebugIndicator) {
+            return Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.red, width: 2.5),
+                borderRadius: BorderRadius.circular(4.0),
+              ),
+              child: SizedBox(
+                width: fallbackDimensions.width,
+                height: fallbackDimensions.height,
+                child: scrollView,
+              ),
+            );
+          }
         }
 
-        // In release mode, apply the fix silently to prevent a crash.
         return SizedBox(
-          width: fixedWidth,
-          height: fixedHeight,
-          child: fixedScrollView,
+          width: fallbackDimensions.width,
+          height: fallbackDimensions.height,
+          child: scrollView,
         );
       },
     );
   }
 
-  /// Reports a detailed error about which dimension was unbounded.
-  void _reportError(BuildContext context, bool badWidth, bool badHeight) {
-    String culprit = "an unknown parent";
+  Widget _buildScrollView() {
+    final effectiveCacheExtent = scrollCacheExtent ?? cacheExtent;
+    return CustomScrollView(
+      scrollDirection: scrollDirection,
+      reverse: reverse,
+      controller: controller,
+      primary: primary,
+      physics: physics,
+      scrollBehavior: scrollBehavior,
+      shrinkWrap: shrinkWrap,
+      center: center,
+      anchor: anchor,
+      // ignore: deprecated_member_use
+      cacheExtent: effectiveCacheExtent,
+      slivers: slivers,
+      semanticChildCount: semanticChildCount,
+      dragStartBehavior: dragStartBehavior,
+      keyboardDismissBehavior: keyboardDismissBehavior,
+      restorationId: restorationId,
+      clipBehavior: clipBehavior,
+      hitTestBehavior: hitTestBehavior,
+    );
+  }
+}
+
+/// Internal helper for [EzCustomScrollView] layout diagnostics and fallback size calculation.
+abstract final class _EzCustomScrollViewHelper {
+  /// Calculates fallback dimensions when unbounded constraints are encountered.
+  static Size calculateFallbackDimensions({
+    required BuildContext context,
+    required BoxConstraints constraints,
+    required bool isUnboundedWidth,
+    required bool isUnboundedHeight,
+    required double? customFallbackWidth,
+    required double? customFallbackHeight,
+  }) {
+    final mediaQuery = MediaQuery.maybeOf(context);
+    final view = View.maybeOf(context);
+
+    final Size screenSize;
+    if (mediaQuery != null) {
+      screenSize = mediaQuery.size;
+    } else if (view != null && view.devicePixelRatio > 0) {
+      screenSize = view.physicalSize / view.devicePixelRatio;
+    } else {
+      screenSize = const Size(360.0, 640.0);
+    }
+
+    final double availableHeight = (screenSize.height -
+            (mediaQuery?.padding.top ?? 0) -
+            (mediaQuery?.padding.bottom ?? 0) -
+            kToolbarHeight)
+        .clamp(100.0, double.infinity);
+
+    final double effectiveHeight = isUnboundedHeight
+        ? (customFallbackHeight ?? (availableHeight * 0.5))
+        : constraints.maxHeight;
+
+    final double effectiveWidth = isUnboundedWidth
+        ? (customFallbackWidth ??
+            (screenSize.width * 0.5).clamp(100.0, double.infinity))
+        : constraints.maxWidth;
+
+    return Size(effectiveWidth, effectiveHeight);
+  }
+
+  /// Traverses ancestors to find the widget responsible for the unbounded constraint.
+  static String findCulprit(BuildContext context) {
+    String culprit = 'an unknown parent';
     context.visitAncestorElements((element) {
-      if (element.widget is Flex || element.widget is ScrollView) {
-        // Generalized to ScrollView
-        culprit = element.widget.runtimeType.toString();
+      final widget = element.widget;
+      if (widget is Flex ||
+          widget is ScrollView ||
+          widget is Wrap ||
+          widget is UnconstrainedBox) {
+        culprit = widget.runtimeType.toString();
         return false;
       }
       return true;
     });
+    return culprit;
+  }
 
-    String problematicDimension = "unknown";
+  /// Reports a detailed error to [FlutterError] explaining the exact cause and resolution.
+  static void reportUnboundedError({
+    required bool badWidth,
+    required bool badHeight,
+    required Axis scrollDirection,
+    required String culprit,
+  }) {
+    final String problematicDimension;
     if (badWidth && badHeight) {
-      problematicDimension = "width and height";
+      problematicDimension = 'width and height';
     } else if (badWidth) {
-      problematicDimension = "width";
+      problematicDimension = 'width';
     } else {
-      problematicDimension = "height";
+      problematicDimension = 'height';
     }
+
+    final String axisName =
+        scrollDirection == Axis.vertical ? 'vertical' : 'horizontal';
 
     FlutterError.reportError(
       FlutterErrorDetails(
         exception:
-            'EzCustomScrollView: Unbounded $problematicDimension detected.',
+            'EzCustomScrollView: Unbounded $problematicDimension detected in $axisName scroll direction.',
         library: 'EzCustomScrollView',
         context: ErrorDescription('while building EzCustomScrollView'),
         informationCollector: () => [
           ErrorSummary(
-              'EzCustomScrollView has applied an automatic layout fix.'),
+              'EzCustomScrollView has applied an automatic layout fallback to prevent a crash.'),
           ErrorDescription(
-            'This widget was placed directly inside a $culprit, which provides infinite $problematicDimension. '
-            'This would normally cause a layout crash.',
+            'This widget was placed inside a $culprit with infinite $problematicDimension. '
+            'In standard Flutter, this causes a fatal "Vertical/Horizontal viewport was given unbounded height/width" exception.',
           ),
           ErrorHint(
-            'ACTION REQUIRED: For a permanent fix, you must wrap EzCustomScrollView in a widget that provides bounded constraints, such as an Expanded or a SizedBox.',
+            'ACTION REQUIRED: To provide permanent bounded constraints, wrap EzCustomScrollView in an Expanded or Flexible (inside Flex/Column/Row), or a SizedBox with explicit dimensions.',
           ),
         ],
       ),

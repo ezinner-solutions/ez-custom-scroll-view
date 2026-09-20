@@ -1,6 +1,6 @@
 name: ez_custom_scroll_view
-description: A crash-safe CustomScrollView that automatically handles unbounded constraints in any direction.
-version: 0.0.2
+description: A defensive, crash-safe CustomScrollView that automatically handles unbounded constraints with developer diagnostics.
+version: 0.0.4
 homepage: https://github.com/Evgenii-Zinner/ez-custom-scroll-view
 repository: https://github.com/Evgenii-Zinner/ez-custom-scroll-view
 issue_tracker: https://github.com/Evgenii-Zinner/ez-custom-scroll-view/issues

@@ -1,38 +1,38 @@
 # EZ Custom Scroll View
 
-A **crash-safe, self-aware** replacement for `CustomScrollView` that prevents layout errors in `Column`, `Row`, `Flex`, and nested scroll views.
+A **crash-safe, self-aware** drop-in replacement for Flutter's `CustomScrollView` that automatically handles unbounded constraints in `Column`, `Row`, `Flex`, and nested scroll views.
 
 ## 🛑 The Problem
 
-Flutter's `CustomScrollView` tries to expand to fill all available space in its scroll direction. When placed inside a parent with **unbounded constraints**, it breaks the layout.
+Flutter's standard `CustomScrollView` attempts to expand to fill all available space along its scrolling axis. When placed inside a parent with **unbounded constraints**, Flutter throws a fatal runtime exception that crashes your app with a red screen:
 
-Common scenarios that cause this crash:
-*   Placing a vertical scroll view inside a **`Column`**.
-*   Placing a horizontal scroll view inside a **`Row`**.
-*   Nesting it inside another **`ListView`**, **`CustomScrollView`**, or **`SingleChildScrollView`** (NestedListView scenario).
-*   Using it inside a **`Flex`** or unconstrained **`Card`**.
+*   Placing a vertical scroll view directly inside a **`Column`** or **`Flex`**.
+*   Placing a horizontal scroll view directly inside a **`Row`** or **`Flex`**.
+*   Nesting inside an unconstrained parent such as **`UnconstrainedBox`** or another unconstrained scroll view.
 
-Instead of a simple error, this often breaks the build process, causing the UI to vanish and spamming the console with:
-> "Vertical viewport was given unbounded height."
+Common fatal errors in standard Flutter:
+> "Vertical viewport was given unbounded height."  
+> "Horizontal viewport was given unbounded width."  
 > "RenderBox was not laid out: RenderViewport... NEEDS-PAINT NEEDS-COMPOSITING-BITS-UPDATE"
-> "Failed assertion: ... 'hasSize'"
 
 ## ✅ The EZ Solution
 
-`EzCustomScrollView` is a defensive wrapper that detects these unbounded constraints before they cause damage:
+`EzCustomScrollView` intercepts unbounded constraints before they cause a crash:
 
-*   **Auto-Detection:** Instantly identifies if it's in a `Column`, `Row`, or other unbounded parent.
-*   **Crash Prevention:** Automatically applies a safe, bounded size to ensure the widget renders visible content instead of breaking.
-*   **Developer Feedback:**
-    *   **Debug Mode:** Displays a **red border** and logs a clear warning identifying the exact parent causing the issue (e.g., "Unbounded height detected in Column").
-    *   **Release Mode:** Silently fixes the layout so your users never see a broken screen.
+*   **Defensive Fallback Sizing:** Automatically calculates a safe, bounded dimension (e.g., 50% of available screen height/width) so the widget renders visibly and cleanly.
+*   **Developer Diagnostics (Debug Mode):**
+    *   Logs a structured, actionable `FlutterError` explaining the exact parent culprit (e.g., `Column`, `Row`, `UnconstrainedBox`) and how to permanently fix it.
+    *   Highlights the problematic widget with a visible **red outline border** so developers instantly spot layout errors during development.
+*   **Silent Protection (Release Mode):** Silently applies the fallback size so your end users never experience a red screen of death in production.
+*   **100% Drop-in Parity:** Supports all standard `CustomScrollView` properties (`slivers`, `physics`, `controller`, `shrinkWrap`, `hitTestBehavior`, etc.).
 
 ## ✨ Features
 
-*   **Drop-in Replacement:** Same API as `CustomScrollView`.
-*   **Omni-Directional Safety:** Handles both unbounded height (Vertical) and width (Horizontal).
-*   **SEO & Discoverability:** Solves issues with `Column`, `Row`, `NestedListView`, `Flex`, and `Card`.
-*   **Zero Dependencies:** Lightweight and pure Flutter.
+*   **Omni-Directional Crash Prevention:** Safeguards both vertical (height) and horizontal (width) unbounded viewports.
+*   **Culprit Ancestor Inspection:** Automatically inspects the widget tree to inform you which widget (`Column`, `Row`, `Flex`, etc.) caused the constraint violation.
+*   **Customizable Fallbacks:** Override default screen-percentage fallback sizing with `fallbackHeight` and `fallbackWidth`.
+*   **Diagnostic Telemetry:** Optional `onUnboundedDetected` callback for custom logging, analytics, or assertions.
+*   **Zero External Dependencies:** Built entirely with Flutter framework primitives.
 
 ## 📦 Installation
 
@@ -44,38 +44,79 @@ flutter pub add ez_custom_scroll_view
 
 Simply replace `CustomScrollView` with `EzCustomScrollView`.
 
-### Vertical Example (Safe in Column)
+### 1. Vertical Example (Safe inside Column)
+In standard Flutter, this causes an instant crash. With `EzCustomScrollView`, it safely renders and alerts you in the debug console:
 ```dart
 Column(
   children: [
-    Text('Header'),
+    const Text('Header'),
     EzCustomScrollView(
       slivers: [
-        SliverList(delegate: SliverChildListDelegate([])),
+        SliverList.builder(
+          itemCount: 20,
+          itemBuilder: (context, index) => ListTile(title: Text('Item $index')),
+        ),
       ],
     ),
   ],
 )
 ```
 
-### Horizontal Example (Safe in Row)
+### 2. Horizontal Example (Safe inside Row)
 ```dart
 Row(
   children: [
-    Text('Label'),
+    const Text('Sidebar'),
     EzCustomScrollView(
       scrollDirection: Axis.horizontal,
       slivers: [
-        SliverList(delegate: SliverChildListDelegate([])),
+        SliverToBoxAdapter(
+          child: Container(width: 300, color: Colors.blue),
+        ),
       ],
     ),
+  ],
+)
+```
+
+### 3. Recommended Production Fix
+While `EzCustomScrollView` prevents crashes, best practice in production is to provide bounded constraints using `Expanded` or explicit dimensions:
+```dart
+Column(
+  children: [
+    const Text('Header'),
+    Expanded(
+      child: EzCustomScrollView(
+        slivers: [
+          SliverGrid.count(
+            crossAxisCount: 2,
+            children: List.generate(20, (index) => Card(child: Center(child: Text('$index')))),
+          ),
+        ],
+      ),
+    ),
+  ],
+)
+```
+
+### 4. Custom Fallback & Diagnostic Callback
+```dart
+EzCustomScrollView(
+  fallbackHeight: 300.0,
+  fallbackWidth: 250.0,
+  showDebugIndicator: true,
+  onUnboundedDetected: ({required isWidthUnbounded, required isHeightUnbounded, required culprit}) {
+    debugPrint('Layout warning: Unbounded dimension in $culprit');
+  },
+  slivers: [
+    SliverToBoxAdapter(child: Text('Custom bounded scroll')),
   ],
 )
 ```
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to open an issue or submit a pull request on [GitHub](https://github.com/Evgenii-Zinner/ez_custom_scroll_view).
+Contributions are welcome! Please feel free to open an issue or submit a pull request on [GitHub](https://github.com/Evgenii-Zinner/ez-custom-scroll-view).
 
 ## 📜 License
 
