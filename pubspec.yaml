@@ -1,5 +1,5 @@
 name: ez_custom_scroll_view
-description: A defensive, crash-safe CustomScrollView that automatically handles unbounded constraints with developer diagnostics.
+description: A defensive, crash-safe drop-in replacement for Flutter's CustomScrollView that automatically handles unbounded constraints in Column, Row, and Flex.
 version: 0.0.4
 homepage: https://github.com/Evgenii-Zinner/ez-custom-scroll-view
 repository: https://github.com/Evgenii-Zinner/ez-custom-scroll-view
