@@ -4,7 +4,6 @@ A defensive, crash-safe drop-in replacement for Flutter's `CustomScrollView` tha
 
 [![pub package](https://img.shields.io/pub/v/ez_custom_scroll_view.svg)](https://pub.dev/packages/ez_custom_scroll_view)
 [![likes](https://img.shields.io/pub/likes/ez_custom_scroll_view.svg)](https://pub.dev/packages/ez_custom_scroll_view)
-[![popularity](https://img.shields.io/pub/popularity/ez_custom_scroll_view.svg)](https://pub.dev/packages/ez_custom_scroll_view)
 [![pub points](https://img.shields.io/pub/points/ez_custom_scroll_view.svg)](https://pub.dev/packages/ez_custom_scroll_view)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
